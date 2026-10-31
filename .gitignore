@@ -1,0 +1,15 @@
+# Environments and secrets
+.venv/
+.env
+*.env
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Benchmark outputs (regenerate with eval.run)
+results/
+results_*/
+*.db
+.tmp/
