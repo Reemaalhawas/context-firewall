@@ -34,16 +34,22 @@ The evaluation was done in **two layers**.
 
 ### Layer 1: Different data types (robustness)
 
-First we check that the firewall works on every kind of data it may receive. For each type (logs, JSON, HTML and plain text) we hide a known answer inside a large, noisy source and check that:
+First we check that the firewall works on every kind of data it may receive. For each type (logs, JSON, HTML and plain text) we hide a known answer inside a large, noisy source and change the conditions:
 
-- the firewall makes the output much smaller,
-- the answer is still there, or can be recovered with `expand`,
-- with `raw`, the output is passed through exactly as it was.
+- **Size:** 200, 1,000 and 5,000 items
+- **Position:** the answer near the start, middle or end
+- **Noise:** repetitive (the same line again and again) or varied (different services, numbers and words)
+- **Wording:**
+  - **Clear:** the answer uses the words the agent searches for and is marked as an error.
+  - **Hidden:** the answer uses different words ("declined by the bank" instead of "failed payment") and has no error marker.
 
-These tests run locally with no AI calls:
+That is 144 cases. For each one we measure the token saving, and whether the answer is in the summary or can be found with `expand`. We also check that `raw` passes every source through unchanged.
+
+This runs locally in a few seconds, with no AI calls:
 
 ```powershell
-uv run pytest -q
+uv run python -m eval.data_types   # data-type benchmark
+uv run pytest -q                   # 48 unit and regression tests
 ```
 
 ### Layer 2: Agent benchmarking (raw vs native)
@@ -69,7 +75,17 @@ Results are also broken down by data type, so we can see where the firewall help
 
 ### Layer 1: Data types
 
-All 47 unit tests pass. For logs, JSON, HTML and plain text, the firewall shrinks the output and the hidden answer is either kept or recovered with `expand`.
+| Data type | Token saving | Clear answer found | Hidden answer found |
+|---|---|---|---|
+| Logs | 97% | 18 / 18 | 2 / 18 |
+| JSON | 97% | 18 / 18 | 1 / 18 |
+| HTML | 96% | 18 / 18 | 2 / 18 |
+| Text | 96% | 18 / 18 | 2 / 18 |
+
+- **Clear answers are always found** for every data type, size, position and kind of noise, while the output shrinks by about 96%.
+- **Hidden answers are usually missed.** The firewall picks lines by matching keywords, so it cannot know that "declined by the bank" means "failed payment". This is the main limit of the current approach, and the clearest place to improve (for example, with search based on meaning instead of keywords).
+- `raw` passed every source through unchanged.
+- All 48 unit and regression tests pass.
 
 ### Layer 2: Agent benchmark
 
@@ -156,7 +172,7 @@ uv run python -m eval.run --split heldout --suite challenge --config all --repea
 
 - The test tasks are synthetic. Their noise is very repetitive, which makes it easy to compress. Real logs and pages are messier.
 - Token counts inside the firewall are estimates (about 4 characters per token). The real token usage comes from the AI provider.
-- Selection and `expand` use keyword matching, not meaning. If the agent searches with words that are not in the text, it may not find the evidence.
+- Selection and `expand` use keyword matching, not meaning. If the answer uses different words from the search, it is usually missed (see the "hidden" results above).
 - The agent can sometimes call `expand` again and again until it runs out of steps. These runs count as failures.
 - Prompt-injection detection is based on simple patterns. All tool output is clearly marked as untrusted.
 - Results from a small number of runs can vary. Run more repeats before drawing firm conclusions.
@@ -166,6 +182,6 @@ uv run python -m eval.run --split heldout --suite challenge --config all --repea
 ```
 firewall/   the firewall: format detection, shrinking, selection, Vault, history
 agent/      the AI agent that uses tools
-eval/       the benchmark runner and task generators
+eval/       the agent benchmark, the data-type benchmark and task generators
 tests/      unit tests, including the data-type tests
 ```

@@ -47,3 +47,11 @@ def test_resolve_model_defaults(monkeypatch):
     assert resolve_model('native') == 'default-model'
     assert resolve_model('native+small') == 'default-model'
     assert resolve_model('raw', 'explicit') == 'explicit'
+
+def test_data_type_benchmark_clear_answers_always_found():
+    from eval.data_types import KINDS, NOISES, POSITIONS, run_case
+    for kind in KINDS:
+        for noise in NOISES:
+            for position in POSITIONS:
+                r = run_case(kind, 1000, position, noise, 'clear')
+                assert r['recovered'] and r['saving'] > 0.5 and r['raw_identity'], r
