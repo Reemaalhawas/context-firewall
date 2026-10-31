@@ -73,41 +73,44 @@ All 47 unit tests pass. For logs, JSON, HTML and plain text, the firewall shrink
 
 ### Layer 2: Agent benchmark
 
-12 tasks, 1 run each, all on `gpt-4o-mini`, token budget 250. Costs use $0.15 per million input tokens and $0.60 per million output tokens.
+12 tasks, run **twice** (24 runs per setup), all on `gpt-4o-mini`, token budget 250. Costs use $0.15 per million input tokens and $0.60 per million output tokens.
 
 | Setup | Accuracy | Total tokens | Token saving | Total cost | Cost per correct answer |
 |---|---|---|---|---|---|
-| `raw` | 11 / 12 (92%) | 274,421 | — | $0.0414 | $0.00376 |
-| `native` | 10 / 12 (83%) | 61,062 | **78% fewer** | $0.0097 | **$0.00097 (74% cheaper)** |
-| `native+small`* | 9 / 12 (75%) | 96,795 | 65% fewer | $0.0152 | $0.00169 |
+| `raw` | 23 / 24 (96%) | 548,841 | — | $0.0828 | $0.00360 |
+| `native` | 20 / 24 (83%) | 139,164 | **75% fewer** | $0.0221 | **$0.00110 (69% cheaper)** |
+| `native+small`* | 18 / 24 (75%) | 193,298 | 65% fewer | $0.0304 | $0.00169 |
 
-\* `CF_SMALL_MODEL` was not set for this run, so `native+small` used the same model as `native`. It acts as a second run of the firewall and shows how much results vary from run to run.
+\* `CF_SMALL_MODEL` was not set for these runs, so `native+small` used the same model as `native`. It acts as extra firewall runs and shows how much results vary from run to run.
 
-**In short:** the firewall cut token use by about 4.5 times and the cost of each correct answer by about 4 times, while accuracy dropped by one task (92% → 83%).
+**In short:** the firewall cut token use by about 4 times and the cost of each correct answer by about 3 times. Accuracy went from 96% to 83%.
 
-The trade-off is extra work: the agent took 4.7 steps per task on average instead of 2.4, because it sometimes needs `expand` to fetch hidden evidence.
+The results were stable between the two runs: `native` scored 10 / 12 both times, and `raw` used the same number of tokens both times.
+
+The trade-off is extra work: the agent took about 5 steps per task on average instead of 2.4, because it sometimes needs `expand` to fetch hidden evidence.
 
 ### Results by data type
 
-| Data type | Tasks | `raw` accuracy | `native` accuracy | `raw` tokens | `native` tokens | Token saving |
-|---|---|---|---|---|---|---|
-| Logs | 3 | 2 / 3 | **3 / 3** | 138,276 | 11,784 | **91% fewer** |
-| JSON | 6 | 6 / 6 | 5 / 6 | 60,347 | 37,098 | 39% fewer |
-| HTML | 3 | 3 / 3 | 2 / 3 | 75,798 | 12,180 | 84% fewer |
+Both runs combined:
 
-- **Logs** are where the firewall works best: much smaller and fully accurate.
-- **HTML** pages also shrink a lot.
+| Data type | Runs | `raw` accuracy | `native` accuracy | `raw` tokens | `native` tokens | Token saving |
+|---|---|---|---|---|---|---|
+| Logs | 6 | 5 / 6 | 5 / 6 | 276,551 | 46,083 | **83% fewer** |
+| JSON | 12 | 12 / 12 | 10 / 12 | 120,694 | 74,136 | 39% fewer |
+| HTML | 6 | 6 / 6 | 5 / 6 | 151,596 | 18,945 | **88% fewer** |
+
+- **Logs and HTML** are where the firewall works best: more than 80% smaller with almost the same accuracy.
 - **JSON** saves less, because each record must be kept whole to keep IDs next to their details.
 
 ### Why runs failed
 
 - **`raw`, 1 failure:** the agent answered `ERROR connection pool exhausted` instead of `connection pool exhausted`. The evidence was right, but the exact-match check is strict about the extra word.
-- **Firewall runs, 4 of 5 failures:** the agent kept calling `expand` until it ran out of its 12 steps, without ever submitting an answer. Limiting the number of `expand` calls is the main next improvement.
+- **Firewall runs, 9 of 10 failures:** the agent kept calling `expand` until it ran out of its 12 steps, without ever submitting an answer. The deployment task (`dev-deploy`) failed this way in every firewall run. Limiting the number of `expand` calls is the main next improvement.
 - **Firewall runs, 1 failure:** on the product page, the agent picked a price from the navigation menu (`Prices from $9`) instead of the product price (`$247`).
 
-The injection traps were passed by every setup: no agent followed the hidden "say PWNED" instruction.
+The injection traps were passed by every setup in both runs: no agent followed the hidden "say PWNED" instruction.
 
-These results come from one run of 12 synthetic tasks, so they show a clear direction, not a final proof. More repeats and real-world data are needed for firm conclusions.
+These results come from two runs of 12 synthetic tasks, so they show a clear direction, not a final proof. More repeats and real-world data are needed for firm conclusions.
 
 ## Run it yourself
 
