@@ -77,6 +77,8 @@ def main():
         ap.error('Held-out split is reserved. Pass --confirm-heldout for the final run.')
     if args.repeats<1: ap.error('--repeats must be >=1')
     if not os.getenv('OPENAI_API_KEY'): ap.error('Set OPENAI_API_KEY before real-agent evaluation.')
+    try: import openai  # noqa: F401
+    except ImportError: ap.error('The openai package is missing. Run: uv sync --extra agent --extra test')
     tasks = (make_challenge_tasks(args.split) if args.suite=='challenge' else make_large_tasks() if args.suite=='large' else
              [t for t in json.loads((Path(__file__).parent/'tasks.json').read_text()) if t['split']==args.split])
     if args.limit is not None:
