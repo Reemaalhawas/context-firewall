@@ -53,5 +53,5 @@ def test_data_type_benchmark_clear_answers_always_found():
     for kind in KINDS:
         for noise in NOISES:
             for position in POSITIONS:
-                r = run_case(kind, 1000, position, noise, 'clear')
+                r = run_case(kind, 1000, position, noise)
                 assert r['recovered'] and r['saving'] > 0.5 and r['raw_identity'], r

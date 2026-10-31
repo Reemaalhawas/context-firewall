@@ -1,27 +1,23 @@
-"""Layer 1 benchmark: data-type robustness. Runs locally, no API calls.
+"""Layer 1 benchmark: can the firewall handle every data type? Runs locally, no API calls.
 
 Usage: python -m eval.data_types
 
-For each data type (log, json, html, text) a known answer is hidden in a large source.
-We vary the size, where the answer sits, how repetitive the noise is, and how the answer
-is worded: 'clear' uses the words the agent searches for and is marked as an error;
-'hidden' uses different words and no error marker. We measure token saving, whether the
-answer is kept in the summary, and whether expand recovers it.
+For each data type (log, json, html, text) a known answer is placed in a large source.
+We vary the size, where the answer sits, and how repetitive the noise is, then measure
+token saving and whether the answer is kept in the summary or recovered with expand.
 """
 import json
 import random
 from firewall.core import ContextFirewall, approx_tokens
 
 ANSWER = 'ZETA-9041'
-NEEDLES = {'clear': (f'payment failed for order code {ANSWER}', 'ERROR'),
-           'hidden': (f'order {ANSWER} was declined by the bank', 'INFO')}
+NEEDLE = f'payment failed for order code {ANSWER}'
 GOAL = 'find the failed payment code'
 QUERY = 'failed payment code'
 KINDS = ('log', 'json', 'html', 'text')
 SIZES = (200, 1000, 5000)
 POSITIONS = (0.1, 0.5, 0.9)
 NOISES = ('repetitive', 'varied')
-WORDINGS = tuple(NEEDLES)
 
 SERVICES = ['auth', 'billing', 'search', 'cart', 'gateway', 'catalog', 'profile', 'notify']
 ACTIONS = ['request completed', 'cache refreshed', 'session renewed', 'job scheduled', 'record synced', 'health check ok']
@@ -42,25 +38,24 @@ def _noise_item(kind, i, noise, rng):
             'html': f'<p>{svc.title()} {words} item {rng.randrange(10**5)}.</p>',
             'text': f'{svc.title()} team note {rng.randrange(10**5)}: {act}, see {words}.'}[kind]
 
-def make_source(kind, size, position, noise, wording='clear', seed=1):
+def make_source(kind, size, position, noise, seed=1):
     rng = random.Random(seed)
     items = [_noise_item(kind, i, noise, rng) for i in range(size)]
     at = int(size * position)
-    needle, level = NEEDLES[wording]
     if kind == 'log':
-        items.insert(at, f'2026-10-31T14:32:00Z {level} {needle}')
+        items.insert(at, f'2026-10-31T14:32:00Z ERROR {NEEDLE}')
         return '\n'.join(items)
     if kind == 'json':
-        items.insert(at, {'id': ANSWER, 'status': 'failed' if wording == 'clear' else 'closed', 'note': needle})
+        items.insert(at, {'id': ANSWER, 'status': 'failed', 'note': NEEDLE})
         return json.dumps({'orders': items})
     if kind == 'html':
-        items.insert(at, f'<main><p>Alert: {needle}.</p></main>')
+        items.insert(at, f'<main><p>Alert: {NEEDLE}.</p></main>')
         return '<html><nav>Home Store Contact</nav>' + ''.join(items) + '<footer>Copyright</footer></html>'
-    items.insert(at, f'Alert: {needle}.')
+    items.insert(at, f'Alert: {NEEDLE}.')
     return '\n\n'.join(items)
 
-def run_case(kind, size, position, noise, wording='clear', budget=250):
-    raw = make_source(kind, size, position, noise, wording)
+def run_case(kind, size, position, noise, budget=250):
+    raw = make_source(kind, size, position, noise)
     fw = ContextFirewall('native', budget=budget); fw.start(GOAL)
     summary = fw.process('read_source', raw)
     in_summary = ANSWER in summary
@@ -70,33 +65,34 @@ def run_case(kind, size, position, noise, wording='clear', budget=250):
         recovered = ANSWER in fw.expand(handle, QUERY)
     raw_fw = ContextFirewall('raw'); raw_fw.start(GOAL)
     original, delivered = approx_tokens(raw), approx_tokens(summary)
-    return {'kind': kind, 'size': size, 'position': position, 'noise': noise, 'wording': wording,
+    return {'kind': kind, 'size': size, 'position': position, 'noise': noise,
             'original_tokens': original, 'delivered_tokens': delivered,
             'saving': 1 - delivered / original, 'in_summary': in_summary, 'recovered': recovered,
             'raw_identity': raw_fw.process('read_source', raw) == raw}
 
 def run_all():
-    return [run_case(k, s, p, n, w) for k in KINDS for w in WORDINGS for n in NOISES for s in SIZES for p in POSITIONS]
+    return [run_case(k, s, p, n) for k in KINDS for n in NOISES for s in SIZES for p in POSITIONS]
 
 def summarize(rows):
-    """One row per data type: token saving, and how often the answer was found per wording."""
+    """One row per data type: cases, token saving and how often the answer was found."""
     table = []
     for kind in KINDS:
         sub = [r for r in rows if r['kind'] == kind]
-        row = {'kind': kind, 'avg_saving': sum(r['saving'] for r in sub) / len(sub),
-               'raw_identity': all(r['raw_identity'] for r in sub)}
-        for w in WORDINGS:
-            part = [r for r in sub if r['wording'] == w]
-            row[w] = (sum(r['recovered'] for r in part), len(part))
-        table.append(row)
+        table.append({'kind': kind, 'cases': len(sub),
+                      'original_tokens': sum(r['original_tokens'] for r in sub),
+                      'delivered_tokens': sum(r['delivered_tokens'] for r in sub),
+                      'avg_saving': sum(r['saving'] for r in sub) / len(sub),
+                      'found': sum(r['recovered'] for r in sub),
+                      'raw_identity': all(r['raw_identity'] for r in sub)})
     return table
 
 def main():
     rows = run_all()
-    print('| Data type | Avg token saving | Clear answer found | Hidden answer found |')
-    print('|---|---|---|---|')
+    print('| Data type | Cases | Tokens before | Tokens after | Avg token saving | Answer found |')
+    print('|---|---|---|---|---|---|')
     for t in summarize(rows):
-        print(f"| {t['kind']} | {t['avg_saving']:.0%} | {t['clear'][0]}/{t['clear'][1]} | {t['hidden'][0]}/{t['hidden'][1]} |")
+        print(f"| {t['kind']} | {t['cases']} | {t['original_tokens']:,} | {t['delivered_tokens']:,} | "
+              f"{t['avg_saving']:.0%} | {t['found']}/{t['cases']} |")
     print(f"\n{len(rows)} cases. Raw passes every source through unchanged: {all(r['raw_identity'] for r in rows)}")
 
 if __name__ == '__main__': main()

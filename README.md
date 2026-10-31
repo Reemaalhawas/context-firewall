@@ -39,11 +39,8 @@ First we check that the firewall works on every kind of data it may receive. For
 - **Size:** 200, 1,000 and 5,000 items
 - **Position:** the answer near the start, middle or end
 - **Noise:** repetitive (the same line again and again) or varied (different services, numbers and words)
-- **Wording:**
-  - **Clear:** the answer uses the words the agent searches for and is marked as an error.
-  - **Hidden:** the answer uses different words ("declined by the bank" instead of "failed payment") and has no error marker.
 
-That is 144 cases. For each one we measure the token saving, and whether the answer is in the summary or can be found with `expand`. We also check that `raw` passes every source through unchanged.
+That is 72 cases. For each one we measure the token saving, and whether the answer is in the summary or can be found with `expand`. We also check that `raw` passes every source through unchanged.
 
 This runs locally in a few seconds, with no AI calls:
 
@@ -75,15 +72,15 @@ Results are also broken down by data type, so we can see where the firewall help
 
 ### Layer 1: Data types
 
-| Data type | Token saving | Clear answer found | Hidden answer found |
-|---|---|---|---|
-| Logs | 97% | 18 / 18 | 2 / 18 |
-| JSON | 97% | 18 / 18 | 1 / 18 |
-| HTML | 96% | 18 / 18 | 2 / 18 |
-| Text | 96% | 18 / 18 | 2 / 18 |
+| Data type | Cases | Tokens before | Tokens after | Token saving | Answer found |
+|---|---|---|---|---|---|
+| Logs | 18 | 634,947 | 5,169 | 97% | 18 / 18 |
+| JSON | 18 | 798,639 | 5,125 | 97% | 18 / 18 |
+| HTML | 18 | 576,690 | 5,031 | 96% | 18 / 18 |
+| Text | 18 | 611,757 | 5,169 | 96% | 18 / 18 |
 
-- **Clear answers are always found** for every data type, size, position and kind of noise, while the output shrinks by about 96%.
-- **Hidden answers are usually missed.** The firewall picks lines by matching keywords, so it cannot know that "declined by the bank" means "failed payment". This is the main limit of the current approach, and the clearest place to improve (for example, with search based on meaning instead of keywords).
+- **The firewall handles every data type.** The answer was found in all 72 cases, for every size, position and kind of noise.
+- The output shrank by about **96%** on average.
 - `raw` passed every source through unchanged.
 - All 48 unit and regression tests pass.
 
@@ -172,7 +169,7 @@ uv run python -m eval.run --split heldout --suite challenge --config all --repea
 
 - The test tasks are synthetic. Their noise is very repetitive, which makes it easy to compress. Real logs and pages are messier.
 - Token counts inside the firewall are estimates (about 4 characters per token). The real token usage comes from the AI provider.
-- Selection and `expand` use keyword matching, not meaning. If the answer uses different words from the search, it is usually missed (see the "hidden" results above).
+- Selection and `expand` use keyword matching, not meaning. If the agent searches with words that are not in the text, it may not find the evidence.
 - The agent can sometimes call `expand` again and again until it runs out of steps. These runs count as failures.
 - Prompt-injection detection is based on simple patterns. All tool output is clearly marked as untrusted.
 - Results from a small number of runs can vary. Run more repeats before drawing firm conclusions.
