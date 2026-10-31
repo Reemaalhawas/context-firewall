@@ -26,7 +26,6 @@ Small outputs (under about 500 tokens) are passed through unchanged.
 |---|---|
 | `raw` | No firewall. The model sees every output in full. |
 | `native` | The full firewall. |
-| `native+small` | The full firewall with a smaller model (`CF_SMALL_MODEL`). |
 
 ## Evaluation
 
@@ -63,9 +62,6 @@ The results come from 2 runs per setup (24 runs each) on `gpt-4o-mini`. Costs us
 |---|---|---|---|---|
 | `raw` | 23 / 24 (96%) | 548,841 | — | $0.00360 |
 | `native` | 20 / 24 (83%) | 139,164 | **75%** | **$0.00110** |
-| `native+small`* | 18 / 24 (75%) | 193,298 | 65% | $0.00169 |
-
-\* `CF_SMALL_MODEL` was not set, so `native+small` used the same model as `native`.
 
 Results by data type:
 
@@ -96,7 +92,6 @@ Run the agent benchmark (Layer 2):
 ```powershell
 $env:OPENAI_API_KEY="YOUR_KEY"
 $env:CF_MODEL="gpt-4o-mini"
-$env:CF_SMALL_MODEL="YOUR_SMALLER_MODEL"
 
 uv run python -m eval.run --split dev --suite challenge --config all --input-price 0.15 --output-price 0.60 --out results/dev
 ```
